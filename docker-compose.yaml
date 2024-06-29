@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  staytus:
+    image: "galexrt/staytus:latest"
+    container_name: "staytus"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: "512mb"
+        reservations:
+          memory: "256mb"
+    depends_on:
+      mariadb:
+        condition: "service_started"
+    environment:
+      DB_HOST: "mariadb"
+      DB_DATABASE: "staytus"
+      DB_USER: "staytus"
+      DB_PASSWORD: "staytus"
+      DB_ADAPTER: "mysql2"
+      DB_POOL: 5
+    ports:
+      - "127.0.0.1:8787:8787/tcp"
+    networks:
+      - "staytus-network"
+    restart: "unless-stopped"
+
+  mariadb:
+    image: "mariadb:11.3.2-jammy"
+    container_name: "mariadb"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: "512mb"
+        reservations:
+          memory: "256mb"
+    environment:
+      MYSQL_ROOT_PASSWORD: "mariadb"
+      MYSQL_DATABASE: "staytus"
+      MYSQL_USER: "staytus"
+      MYSQL_PASSWORD: "staytus"
+    volumes:
+      - "mysqldata:/var/lib/mysql:rw"
+    networks:
+      - "staytus-network"
+
+volumes:
+  mysqldata:
+
+networks:
+  staytus-network:
+    driver: "bridge"
+    name: "staytus-network"
+    external: false
