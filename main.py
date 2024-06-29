@@ -7,6 +7,7 @@ import os
 import time
 import signal
 import logging
+from urllib.parse import urljoin
 from threading import Thread
 from wsgiref.simple_server import WSGIServer
 
@@ -21,11 +22,13 @@ class StaytusExporter:
     """
 
     _CHECK_INTERVAL_SECONDS: float = 0.05
+    _USER_AGENT: str = "staytus_exporter"
 
     def __init__(self):
         self._stopped = False
         self._server_thread: Thread | None = None
         self._server: WSGIServer | None = None
+        self._session: requests.Session | None = None
 
         self.polling_interval_seconds = int(os.getenv("POLLING_INTERVAL_SECONDS", "2"))
         self.exporter_port = int(os.getenv("EXPORTER_PORT", "9877"))
@@ -48,12 +51,22 @@ class StaytusExporter:
 
     def stop(self):
         self._stopped = True
+        if self._session is not None:
+            self._session.close()
         if self._server is not None:
             self._server.server_close()
 
     def run(self):
         logging.info("Run exporter.")
         self._server_thread, self._server_thread = start_http_server(self.exporter_port, registry=self.registry)
+        self._session: requests.Session = requests.Session()
+        self._session.headers.update(
+            {
+                "X-Auth-Token": self.staytus_api_token,
+                "X-Auth-Secret": self.staytus_api_secret,
+                "User-Agent": self._USER_AGENT,
+            }
+        )
         self.run_metrics_loop()
 
     def run_metrics_loop(self):
@@ -70,13 +83,7 @@ class StaytusExporter:
     def fetch(self):
         "Metrics fetching method"
         logging.debug("Try to update metrics.")
-        response = requests.get(
-            url=f"{self.staytus_api_url}api/v1/services/all",
-            headers={
-                "X-Auth-Token": self.staytus_api_token,
-                "X-Auth-Secret": self.staytus_api_secret,
-            },
-        )
+        response = self._session.get(url=urljoin(self.staytus_api_url, "/api/v1/services/all"))
         response.raise_for_status()
         staytus_data = response.json()
         if staytus_data.get("status") != "success":
