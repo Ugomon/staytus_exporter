@@ -1,6 +1,6 @@
 FROM python:3.11-alpine AS app
 WORKDIR /opt/exporter
-COPY requirements.txt ./requirements.txt
+COPY src/requirements.txt ./requirements.txt
 RUN python3 -m pip install \
     --no-cache-dir \
     -r ./requirements.txt
