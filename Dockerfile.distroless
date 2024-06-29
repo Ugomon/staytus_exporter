@@ -1,0 +1,31 @@
+FROM debian:12-slim\
+@sha256:804194b909ef23fb995d9412c9378fb3505fe2427b70f3cc425339e48a828fca \
+    AS build
+RUN apt-get update \
+    && apt-get install --yes \
+        --no-install-suggests \
+        --no-install-recommends \
+        python3-venv gcc libpython3-dev \
+    && rm -rf "/var/lib/apt/lists/*" \
+    && python3 -m venv /venv \
+    && /venv/bin/pip install \
+        --no-cache-dir --upgrade \
+        pip setuptools wheel
+
+FROM build AS build-venv
+COPY requirements.txt /requirements.txt
+RUN /venv/bin/pip install \
+    --disable-pip-version-check --no-cache-dir \
+    --requirement /requirements.txt
+
+FROM gcr.io/distroless/python3-debian12\
+@sha256:e8e50bc861b16d916f598d7ec920a8cef1e35e99b668a738fe80c032801ceb78 \
+    AS app
+COPY --from=build-venv /venv /venv
+WORKDIR /opt/exporter
+COPY main.py main.py
+EXPOSE 9877/tcp
+ENV EXPORTER_PORT="9877" \
+    STAYTUS_API_URL="http://staytus:8787/" \
+    POLLING_INTERVAL_SECONDS="2"
+CMD ["/venv/bin/python3", "main.py"]

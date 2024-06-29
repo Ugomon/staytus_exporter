@@ -1,0 +1,26 @@
+services:
+  exporter:
+    image: "staytus-exporter:latest"
+    container_name: "staytus-exporter"
+    build:
+      context: "."
+      dockerfile: "Dockerfile.alpine"
+      target: "app"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: "24mb"
+        reservations:
+          cpus: '0.1'
+          memory: "24mb"
+    depends_on:
+      staytus:
+        condition: "service_started"
+    read_only: true
+    env_file: .env
+    ports:
+      - "127.0.0.1:9877:9877/tcp"
+    networks:
+      - "staytus-network"
+    restart: "unless-stopped"
