@@ -1,11 +1,5 @@
-"""
-Application exporter example
-based on https://trstringer.com/quick-and-easy-prometheus-exporter/
-"""
-
 import os
 import time
-import signal
 import logging
 from urllib.parse import urljoin
 from threading import Thread
@@ -13,6 +7,8 @@ from wsgiref.simple_server import WSGIServer
 
 from prometheus_client import start_http_server, CollectorRegistry, Enum
 import requests
+
+from config import StaytusExporterConfig
 
 
 class StaytusExporter:
@@ -24,17 +20,12 @@ class StaytusExporter:
     _CHECK_INTERVAL_SECONDS: float = 0.05
     _USER_AGENT: str = "staytus_exporter"
 
-    def __init__(self):
+    def __init__(self, config: StaytusExporterConfig):
+        self.config = config
         self._stopped = False
         self._server_thread: Thread | None = None
         self._server: WSGIServer | None = None
         self._session: requests.Session | None = None
-
-        self.polling_interval_seconds = int(os.getenv("POLLING_INTERVAL_SECONDS", "2"))
-        self.exporter_port = int(os.getenv("EXPORTER_PORT", "9877"))
-        self.staytus_api_url = os.getenv("STAYTUS_API_URL", "http://localhost:8787/")
-        self.staytus_api_token = os.environ["STAYTUS_API_TOKEN"].strip()
-        self.staytus_api_secret = os.environ["STAYTUS_API_SECRET"].strip()
 
         self.registry = CollectorRegistry()
         self.service_statuses_metric = Enum(
@@ -64,12 +55,12 @@ class StaytusExporter:
 
     def run(self):
         logging.info("Run exporter.")
-        self._server_thread, self._server_thread = start_http_server(self.exporter_port, registry=self.registry)
+        self._server_thread, self._server_thread = start_http_server(self.config.exporter_port, registry=self.registry)
         self._session: requests.Session = requests.Session()
         self._session.headers.update(
             {
-                "X-Auth-Token": self.staytus_api_token,
-                "X-Auth-Secret": self.staytus_api_secret,
+                "X-Auth-Token": self.config.staytus_api_token,
+                "X-Auth-Secret": self.config.staytus_api_secret,
                 "User-Agent": self._USER_AGENT,
             }
         )
@@ -80,7 +71,7 @@ class StaytusExporter:
         last_update: float = 0.0
         while not self.stopped:
             now = time.time()
-            if time.time() > last_update + self.polling_interval_seconds:
+            if time.time() > last_update + self.config.polling_interval_seconds:
                 try:
                     self.fetch()
                 except (ValueError, TypeError, requests.RequestException) as err:
@@ -95,7 +86,7 @@ class StaytusExporter:
     def fetch(self):
         "Metrics fetching method"
         logging.debug("Try to update metrics.")
-        response = self._session.get(url=urljoin(self.staytus_api_url, "/api/v1/services/all"))
+        response = self._session.get(url=urljoin(self.config.staytus_api_url, "/api/v1/services/all"))
         response.raise_for_status()
         staytus_data = response.json()
         if staytus_data.get("status") != "success":
@@ -107,19 +98,3 @@ class StaytusExporter:
             current_label = self.service_statuses_metric.labels(service_permalink=service_permalink)
             current_label.state(service_status)
         logging.debug("Success updated metrics.")
-
-
-def main():
-    "Main entry point"
-    logging.basicConfig(
-        level=logging.DEBUG if os.getenv("DEBUG") else logging.INFO,
-        format="%(asctime)s [%(levelname)s] <%(name)s> %(message)s",
-    )
-    app = StaytusExporter()
-    signal.signal(signal.SIGINT, lambda *args: app.stop())
-    signal.signal(signal.SIGTERM, lambda *args: app.stop())
-    app.run()
-
-
-if __name__ == "__main__":
-    main()

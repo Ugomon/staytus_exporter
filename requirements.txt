@@ -1,5 +1,7 @@
+attrs==23.2.0
 certifi==2024.2.2
 charset-normalizer==3.3.2
+environ-config==23.2.0
 idna==3.7
 prometheus_client==0.20.0
 requests==2.31.0

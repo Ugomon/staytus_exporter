@@ -1,10 +1,10 @@
-FROM python:3.11-slim-bookworm AS app
+FROM python:3.11-alpine AS app
 WORKDIR /opt/exporter
 COPY requirements.txt ./requirements.txt
 RUN python3 -m pip install \
     --no-cache-dir \
     -r ./requirements.txt
-COPY main.py main.py
+COPY src/* ./
 EXPOSE 9877/tcp
 ENV EXPORTER_PORT="9877" \
     STAYTUS_API_URL="http://staytus:8787/" \
