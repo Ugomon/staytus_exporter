@@ -5,29 +5,31 @@ based on https://trstringer.com/quick-and-easy-prometheus-exporter/
 
 import os
 import time
-from prometheus_client import start_http_server, Gauge, Enum
-import requests
+from prometheus_client import start_http_server, CollectorRegistry, Gauge, Enum
 
 
-class AppMetrics:
+class StaytusExporter:
     """
-    Representation of Prometheus metrics and loop to fetch and transform
+    Loop to fetch and transform
     application metrics into Prometheus metrics.
     """
 
-    def __init__(self, app_port=80, polling_interval_seconds=5):
-        self.app_port = app_port
-        self.polling_interval_seconds = polling_interval_seconds
+    def __init__(self):
+        self.polling_interval_seconds = int(os.getenv("POLLING_INTERVAL_SECONDS", "2"))
+        self.exporter_port = int(os.getenv("EXPORTER_PORT", "9877"))
+        self.start_time = 0
 
-        # Prometheus metrics to collect
-        self.current_requests = Gauge("app_requests_current", "Current requests")
-        self.pending_requests = Gauge("app_requests_pending", "Pending requests")
-        self.total_uptime = Gauge("app_uptime", "Uptime")
-        self.health = Enum("app_health", "Health", states=["healthy", "unhealthy"])
+        self.registry = CollectorRegistry()
+        self.total_uptime = Gauge("app_uptime", "Uptime", registry=self.registry)
+        self.health = Enum("app_health", "Health", states=["healthy", "unhealthy"], registry=self.registry)
+
+    def run(self):
+        self.start_time = int(time.time())
+        start_http_server(self.exporter_port, registry=self.registry)
+        self.run_metrics_loop()
 
     def run_metrics_loop(self):
-        """Metrics fetching loop"""
-
+        "Metrics fetching loop"
         while True:
             self.fetch()
             time.sleep(self.polling_interval_seconds)
@@ -37,28 +39,13 @@ class AppMetrics:
         Get metrics from application and refresh Prometheus metrics with
         new values.
         """
-
-        # Fetch raw status data from the application
-        resp = requests.get(url=f"http://localhost:{self.app_port}/status")
-        status_data = resp.json()
-
-        # Update Prometheus metrics with application metrics
-        self.current_requests.set(status_data["current_requests"])
-        self.pending_requests.set(status_data["pending_requests"])
-        self.total_uptime.set(status_data["total_uptime"])
-        self.health.state(status_data["health"])
+        self.total_uptime.set(int(time.time()) - self.start_time)
+        self.health.state("healthy")
 
 
 def main():
-    """Main entry point"""
-
-    polling_interval_seconds = int(os.getenv("POLLING_INTERVAL_SECONDS", "5"))
-    app_port = int(os.getenv("APP_PORT", "80"))
-    exporter_port = int(os.getenv("EXPORTER_PORT", "9877"))
-
-    app_metrics = AppMetrics(app_port=app_port, polling_interval_seconds=polling_interval_seconds)
-    start_http_server(exporter_port)
-    app_metrics.run_metrics_loop()
+    "Main entry point"
+    StaytusExporter().run()
 
 
 if __name__ == "__main__":
