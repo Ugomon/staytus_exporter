@@ -5,7 +5,11 @@ based on https://trstringer.com/quick-and-easy-prometheus-exporter/
 
 import os
 import time
+import signal
 import logging
+from threading import Thread
+from wsgiref.simple_server import WSGIServer
+
 from prometheus_client import start_http_server, CollectorRegistry, Enum
 import requests
 
@@ -16,7 +20,13 @@ class StaytusExporter:
     application metrics into Prometheus metrics.
     """
 
+    _CHECK_INTERVAL_SECONDS: float = 0.05
+
     def __init__(self):
+        self._stopped = False
+        self._server_thread: Thread | None = None
+        self._server: WSGIServer | None = None
+
         self.polling_interval_seconds = int(os.getenv("POLLING_INTERVAL_SECONDS", "2"))
         self.exporter_port = int(os.getenv("EXPORTER_PORT", "9877"))
         self.staytus_api_url = os.getenv("STAYTUS_API_URL", "http://localhost:8787/")
@@ -32,16 +42,30 @@ class StaytusExporter:
             registry=self.registry,
         )
 
+    @property
+    def stopped(self) -> bool:
+        return self._stopped
+
+    def stop(self):
+        self._stopped = True
+        if self._server is not None:
+            self._server.server_close()
+
     def run(self):
         logging.info("Run exporter.")
-        start_http_server(self.exporter_port, registry=self.registry)
+        self._server_thread, self._server_thread = start_http_server(self.exporter_port, registry=self.registry)
         self.run_metrics_loop()
 
     def run_metrics_loop(self):
         "Metrics fetching loop"
-        while True:
-            self.fetch()
-            time.sleep(self.polling_interval_seconds)
+        last_update: float = 0.0
+        while not self.stopped:
+            now = time.time()
+            if time.time() > last_update + self.polling_interval_seconds:
+                self.fetch()
+                last_update = now
+            time.sleep(self._CHECK_INTERVAL_SECONDS)
+        logging.info("Stopped.")
 
     def fetch(self):
         "Metrics fetching method"
@@ -72,7 +96,10 @@ def main():
         level=logging.DEBUG if os.getenv("DEBUG") else logging.INFO,
         format="%(asctime)s [%(levelname)s] <%(name)s> %(message)s",
     )
-    StaytusExporter().run()
+    app = StaytusExporter()
+    signal.signal(signal.SIGINT, lambda *args: app.stop())
+    signal.signal(signal.SIGTERM, lambda *args: app.stop())
+    app.run()
 
 
 if __name__ == "__main__":
