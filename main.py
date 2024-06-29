@@ -44,6 +44,12 @@ class StaytusExporter:
             states=["ok", "minor", "major", "maintenance"],
             registry=self.registry,
         )
+        self.staytus_health = Enum(
+            name="staytus_health",
+            documentation="Staytus Health",
+            states=["healthy", "unhealthy"],
+            registry=self.registry,
+        )
 
     @property
     def stopped(self) -> bool:
@@ -75,8 +81,14 @@ class StaytusExporter:
         while not self.stopped:
             now = time.time()
             if time.time() > last_update + self.polling_interval_seconds:
-                self.fetch()
-                last_update = now
+                try:
+                    self.fetch()
+                except (ValueError, TypeError, requests.RequestException) as err:
+                    self.staytus_health.state("unhealthy")
+                    logging.error("Error when requesting the status :: %s", err)
+                else:
+                    self.staytus_health.state("healthy")
+                    last_update = now
             time.sleep(self._CHECK_INTERVAL_SECONDS)
         logging.info("Stopped.")
 
