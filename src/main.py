@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+"""Entrypoint"""
+import logging
 import os
 import signal
-import logging
 
 from config import get_config
 from exporter import StaytusExporter

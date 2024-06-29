@@ -1,16 +1,18 @@
-import time
+"""StaytusExporter class."""
+
 import logging
-from urllib.parse import urljoin
+import time
 from threading import Thread
+from urllib.parse import urljoin
 from wsgiref.simple_server import WSGIServer
 
-from prometheus_client import start_http_server, CollectorRegistry, Enum
 import requests
+from prometheus_client import CollectorRegistry, Enum, start_http_server
 
 from config import StaytusExporterConfig
 
 
-class StaytusExporter:
+class StaytusExporter:  # pylint: disable=R0902
     """
     Loop to fetch and transform
     application metrics into Prometheus metrics.
@@ -43,17 +45,21 @@ class StaytusExporter:
 
     @property
     def registry(self) -> CollectorRegistry:
+        """Used CollectorRegistry"""
         return self._registry
 
     @property
     def session(self) -> requests.Session:
+        """Used requests.Session"""
         return self._session
 
     @property
     def stopped(self) -> bool:
+        """Is the Exporter stopped"""
         return self._stopped
 
     def stop(self):
+        """Stop the Exporter correctly."""
         self._stopped = True
         if self.session is not None:
             self.session.close()
@@ -61,8 +67,11 @@ class StaytusExporter:
             self._server.server_close()
 
     def run(self):
+        """Run the Exporter."""
         logging.info("Run exporter.")
-        self._server_thread, self._server_thread = start_http_server(self.config.exporter_port, registry=self.registry)
+        self._server_thread, self._server_thread = start_http_server(
+            self.config.exporter_port, registry=self.registry
+        )
         self.session.headers.update(
             {
                 "X-Auth-Token": self.config.staytus_api_token,
@@ -94,7 +103,9 @@ class StaytusExporter:
         logging.debug("Success updated metrics.")
 
     def _fetch(self):
-        response = self.session.get(url=urljoin(self.config.staytus_api_url, "/api/v1/services/all"))
+        response = self.session.get(
+            url=urljoin(self.config.staytus_api_url, "/api/v1/services/all")
+        )
         response.raise_for_status()
         staytus_data = response.json()
         if staytus_data.get("status") != "success":
@@ -103,5 +114,7 @@ class StaytusExporter:
         for service_data in staytus_data["data"]:
             service_permalink = service_data["permalink"]
             service_status = service_data["status"]["status_type"]
-            current_label = self.service_statuses_metric.labels(service_permalink=service_permalink)
+            current_label = self.service_statuses_metric.labels(
+                service_permalink=service_permalink
+            )
             current_label.state(service_status)

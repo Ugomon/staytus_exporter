@@ -22,7 +22,9 @@ def exporter():
         "STAYTUS_API_SECRET": "test",
         "DEBUG": "False",
     }
-    config: StaytusExporterConfig = environ.to_config(StaytusExporterConfig, environ=envs_config)
+    config: StaytusExporterConfig = environ.to_config(
+        StaytusExporterConfig, environ=envs_config
+    )
     exporter = StaytusExporter(config=config)
     yield exporter
     exporter.stop()

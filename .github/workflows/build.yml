@@ -1,0 +1,86 @@
+---
+
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: tests-group
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses:  actions/checkout@v4
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install requirements
+        run: |
+          pip install \
+          -r src/requirements.txt \
+          -r tests/requirements.txt
+
+      - name: Run the pylint
+        run: pylint src
+
+      - name: Check the sorting of imports
+        run: isort --check src
+
+      - name: Check the formatting
+        run: black --check src
+
+      - name: Run the mypy
+        run: mypy src
+
+      - name: Running unit tests
+        run: pytest tests
+
+  build:
+    name: build
+    needs: [tests]
+    env:
+      PLATFORM: "linux/amd64,linux/arm64/v8"
+    runs-on: ubuntu-latest
+    concurrency:
+      group: build-group
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          version: latest
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: latest
+
+      - name: Login to docker hub
+        run: |
+          echo "${{ secrets.DOCKERHUB_PASSWORD }}" | \
+          docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" \
+          --password-stdin
+
+      - name: Build app
+        run: |
+          docker buildx build --target app \
+          --tag ${{ secrets.DOCKERHUB_USERNAME }}/staytus_exporter:$GITHUB_SHA \
+          --tag ${{ secrets.DOCKERHUB_USERNAME }}/staytus_exporter:$GITHUB_RUN_NUMBER \
+          --platform $PLATFORM --output type=registry .
+
+      - name: Unlogin to docker hub
+        run: docker logout
